@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WebXR Dimension Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+        }
+
+        /* The UI Overlay sits on top of the 3D Canvas */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through to AR/Canvas when not on panel */
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding-top: max(20px, env(safe-area-inset-top));
+        }
+
+        .panel {
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 24px;
+            border-radius: 20px;
+            pointer-events: auto; /* Catch clicks for inputs */
+            width: 90%;
+            max-width: 320px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 1.2rem;
+            text-align: center;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 12px;
+        }
+
+        .input-group label {
+            flex: 1;
+            font-size: 0.9rem;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            width: 70px;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #000;
+            color: #fff;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: #0a84ff;
+        }
+
+        .input-group span {
+            margin-left: 8px;
+            font-size: 0.85rem;
+            color: #888;
+            width: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        #spawnBtn {
+            background: #0a84ff;
+            color: white;
+        }
+
+        #clearBtn {
+            background: rgba(255, 69, 58, 0.2);
+            color: #ff453a;
+        }
+
+        .hint {
+            font-size: 0.8rem;
+            color: #888;
+            text-align: center;
+            margin-top: 15px;
+            margin-bottom: 0;
+            line-height: 1.4;
+        }
+
+        /* ThreeJS AR button default styling override */
+        #ARButton {
+            bottom: max(20px, env(safe-area-inset-bottom)) !important;
+            padding: 14px 24px !important;
+            border-radius: 100px !important;
+            font-weight: bold !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- User Interface -->
+    <div id="overlay">
+        <div class="panel">
+            <h1>AR Dimension Input</h1>
+            
+            <div class="input-group">
+                <label for="width">Width (X)</label>
+                <input type="number" id="width" value="50" min="1" max="1000">
+                <span>cm</span>
+            </div>
+            <div class="input-group">
+                <label for="height">Height (Y)</label>
+                <input type="number" id="height" value="50" min="1" max="1000">
+                <span>cm</span>
+            </div>
+            <div class="input-group">
+                <label for="depth">Depth (Z)</label>
+                <input type="number" id="depth" value="50" min="1" max="1000">
+                <span>cm</span>
+            </div>
+
+            <div class="controls">
+                <button id="spawnBtn">Preview 3D</button>
+                <button id="clearBtn">Clear Scene</button>
+            </div>
+
+            <p class="hint" id="statusHint">
+                View on a mobile device to use AR.<br>
+                Tap "Preview 3D" to view on desktop.
+            </p>
+        </div>
+    </div>
+
+    <!-- Import Maps for Three.js ES Modules -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Main Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let camera, scene, renderer;
+        let controller;
+        let reticle;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        
+        const spawnedObjects = [];
+        let desktopBox = null;
+        let gridHelper;
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.createElement('div');
+            document.body.appendChild(container);
+
+            // 1. Scene Setup
+            scene = new THREE.Scene();
+
+            // 2. Camera Setup
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            camera.position.set(0, 1.5, 3); // Start camera backed up a bit for desktop view
+
+            // 3. Lighting
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.5);
+            light.position.set(0.5, 1, 0.25);
+            scene.add(light);
+
+            // 4. Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true; // Enable WebXR
+            container.appendChild(renderer.domElement);
+
+            // Desktop Grid Helper (Hidden in AR)
+            gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x222222);
+            scene.add(gridHelper);
+
+            // Desktop Camera Controls
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            // 5. AR Button Setup with DOM Overlay so UI is usable in AR
+            const arButton = ARButton.createButton(renderer, { 
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.getElementById('overlay') }
+            });
+            document.body.appendChild(arButton);
+
+            // 6. AR Hit Test & Controller Setup
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // The Reticle is the "target" ring showing where the object will spawn
+            const reticleGeometry = new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2);
+            const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x0a84ff });
+            reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+            // Event Listeners for UI and Window Resize
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('spawnBtn').addEventListener('click', handleDesktopPreview);
+            document.getElementById('clearBtn').addEventListener('click', clearScene);
+
+            // WebXR Session Listeners (Hide/Show desktop grid)
+            renderer.xr.addEventListener('sessionstart', () => {
+                gridHelper.visible = false;
+                if (desktopBox) desktopBox.visible = false;
+                document.getElementById('statusHint').innerHTML = "Scan the floor slowly.<br>Tap the screen to place object.";
+            });
+            renderer.xr.addEventListener('sessionend', () => {
+                gridHelper.visible = true;
+                if (desktopBox) desktopBox.visible = true;
+                document.getElementById('statusHint').innerHTML = "View on a mobile device to use AR.<br>Tap 'Preview 3D' to view on desktop.";
+            });
+        }
+
+        // --- Core Application Logic ---
+
+        // Generates the 3D Box based on UI inputs
+        function createDimensionedBox() {
+            // Get inputs and convert cm to meters (ThreeJS uses 1 unit = 1 meter)
+            const w = (parseFloat(document.getElementById('width').value) || 50) / 100;
+            const h = (parseFloat(document.getElementById('height').value) || 50) / 100;
+            const d = (parseFloat(document.getElementById('depth').value) || 50) / 100;
+
+            const group = new THREE.Group();
+
+            // Create Box
+            const geometry = new THREE.BoxGeometry(w, h, d);
+            // Shift the geometry up by half its height so the pivot point is at the bottom
+            geometry.translate(0, h / 2, 0); 
+
+            // Semi-transparent blue material
+            const material = new THREE.MeshPhysicalMaterial({
+                color: 0x0a84ff,
+                transparent: true,
+                opacity: 0.3,
+                roughness: 0.2,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            group.add(mesh);
+
+            // Add bold edges to make dimensions clear
+            const edgesGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d));
+            edgesGeo.translate(0, h / 2, 0);
+            const line = new THREE.LineSegments(edgesGeo, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
+            group.add(line);
+
+            return group;
+        }
+
+        // Handles placing object in AR when screen is tapped
+        function onSelect() {
+            if (reticle.visible) {
+                const newBox = createDimensionedBox();
+                
+                // Place box exactly where the reticle is
+                newBox.position.setFromMatrixPosition(reticle.matrix);
+                newBox.quaternion.setFromRotationMatrix(reticle.matrix);
+                
+                scene.add(newBox);
+                spawnedObjects.push(newBox);
+            }
+        }
+
+        // Handles placing object in the Desktop preview mode
+        function handleDesktopPreview() {
+            if (renderer.xr.isPresenting) return; // Don't trigger if in AR
+
+            if (desktopBox) scene.remove(desktopBox);
+            
+            desktopBox = createDimensionedBox();
+            scene.add(desktopBox);
+        }
+
+        // Clears all spawned objects
+        function clearScene() {
+            spawnedObjects.forEach(obj => scene.remove(obj));
+            spawnedObjects.length = 0;
+            
+            if (desktopBox) {
+                scene.remove(desktopBox);
+                desktopBox = null;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Render Loop & AR Hit Testing ---
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            if (frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                // Setup Hit Testing once per session
+                if (hitTestSourceRequested === false) {
+                    session.requestReferenceSpace('viewer').then(function (viewerSpace) {
+                        session.requestHitTestSource({ space: viewerSpace }).then(function (source) {
+                            hitTestSource = source;
+                        });
+                    });
+
+                    session.addEventListener('end', function () {
+                        hitTestSourceRequested = false;
+                        hitTestSource = null;
+                    });
+                    hitTestSourceRequested = true;
+                }
+
+                // Process Hit Test results
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                    if (hitTestResults.length > 0) {
+                        const hit = hitTestResults[0];
+                        const pose = hit.getPose(referenceSpace);
+
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(pose.transform.matrix);
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
