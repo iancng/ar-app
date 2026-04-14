@@ -165,6 +165,7 @@
 
             <div class="controls">
                 <button id="spawnBtn">Preview 3D</button>
+                <button id="iosArBtn" style="display: none; background: #34c759; color: white;">View in AR</button>
                 <button id="clearBtn">Clear Scene</button>
             </div>
 
@@ -190,6 +191,7 @@
         import * as THREE from 'three';
         import { ARButton } from 'three/addons/webxr/ARButton.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
 
         let camera, scene, renderer;
         let controller;
@@ -262,6 +264,20 @@
             document.getElementById('spawnBtn').addEventListener('click', handleDesktopPreview);
             document.getElementById('clearBtn').addEventListener('click', clearScene);
 
+            // iOS AR Quick Look setup
+            const a = document.createElement('a');
+            const supportsIOSAR = a.relList && a.relList.supports && a.relList.supports('ar');
+            
+            if (supportsIOSAR) {
+                document.getElementById('iosArBtn').style.display = 'block';
+                document.getElementById('iosArBtn').addEventListener('click', launchIOSAR);
+                
+                // Hide Three.js WebXR button on iOS to avoid confusion
+                if (arButton) {
+                    arButton.style.display = 'none';
+                }
+            }
+
             // WebXR Session Listeners (Hide/Show desktop grid)
             renderer.xr.addEventListener('sessionstart', () => {
                 gridHelper.visible = false;
@@ -276,6 +292,60 @@
         }
 
         // --- Core Application Logic ---
+
+        // Generates a USDZ file for iOS AR Quick Look
+        async function launchIOSAR() {
+            const btn = document.getElementById('iosArBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "Loading...";
+
+            try {
+                // Get inputs and convert cm to meters
+                const w = (parseFloat(document.getElementById('width').value) || 50) / 100;
+                const h = (parseFloat(document.getElementById('height').value) || 50) / 100;
+                const d = (parseFloat(document.getElementById('depth').value) || 50) / 100;
+
+                // Create a basic mesh (USDZ handles Standard materials best)
+                const geometry = new THREE.BoxGeometry(w, h, d);
+                geometry.translate(0, h / 2, 0); // Origin at the bottom
+                
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0x0a84ff,
+                    transparent: true,
+                    opacity: 0.8,
+                    roughness: 0.2,
+                    metalness: 0.1
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+
+                // Export to USDZ
+                const exporter = new USDZExporter();
+                const arraybuffer = await exporter.parse(mesh);
+                const blob = new Blob([arraybuffer], { type: 'model/vnd.usdz+zip' });
+                const url = URL.createObjectURL(blob);
+
+                // Create a hidden AR anchor and click it to trigger Quick Look
+                const link = document.createElement('a');
+                link.style.display = 'none';
+                link.href = url;
+                link.rel = 'ar';
+                
+                const img = document.createElement('img'); // Required by AR Quick Look
+                link.appendChild(img);
+                document.body.appendChild(link);
+                
+                link.click();
+                
+                // Cleanup
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error("Error creating USDZ:", error);
+                alert("Failed to launch iOS AR.");
+            } finally {
+                btn.innerText = originalText;
+            }
+        }
 
         // Generates the 3D Box based on UI inputs
         function createDimensionedBox() {
