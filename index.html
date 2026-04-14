@@ -4,6 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>WebXR Dimension Visualizer</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#121212">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AR Dims">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- Dynamic PWA Manifest & Icon Injection -->
+    <script>
+        (function() {
+            // Create a simple SVG icon for the app
+            const svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#121212"/><path d="M128 360l128 72 128-72V152l-128-72-128 72z" fill="none" stroke="#0a84ff" stroke-width="24" stroke-linejoin="round"/><path d="M128 152l128 72 128-72M256 224v208" fill="none" stroke="#0a84ff" stroke-width="24" stroke-linejoin="round"/></svg>';
+            const iconDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgIcon);
+
+            // Create Web App Manifest
+            const manifest = {
+                name: "WebXR Dimension Visualizer",
+                short_name: "AR Dims",
+                description: "Visualize 3D dimensions in Augmented Reality",
+                start_url: window.location.href.split('?')[0], // Opens the current URL
+                display: "standalone", // Removes browser UI (URL bar, tabs)
+                background_color: "#121212",
+                theme_color: "#121212",
+                icons: [{ src: iconDataUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
+            };
+
+            // Inject the manifest as a data URI
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = 'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifest));
+            document.head.appendChild(manifestLink);
+
+            // Inject Apple Touch Icon for iOS Homescreen
+            const appleIcon = document.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = iconDataUrl;
+            document.head.appendChild(appleIcon);
+        })();
+    </script>
+
     <style>
         body {
             margin: 0;
@@ -33,21 +74,64 @@
             background: rgba(20, 20, 20, 0.85);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            padding: 24px;
             border-radius: 20px;
             pointer-events: auto; /* Catch clicks for inputs */
             width: 90%;
             max-width: 320px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.1);
+            overflow: hidden;
+            will-change: transform;
         }
 
-        h1 {
-            margin: 0 0 20px 0;
+        #panelHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px 15px 24px;
+            cursor: grab;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* Prevent scroll on touch start */
+        }
+
+        #panelHeader.dragging {
+            cursor: grabbing;
+        }
+
+        #panelHeader h1 {
+            margin: 0;
             font-size: 1.2rem;
-            text-align: center;
+            text-align: left;
             font-weight: 600;
             letter-spacing: 0.5px;
+            pointer-events: none;
+        }
+
+        #collapseBtn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0 5px;
+            flex-shrink: 0;
+            transition: transform 0.2s;
+        }
+
+        #panelContent {
+            padding: 0 24px 24px 24px;
+        }
+
+        .collapsed #panelContent {
+            display: none;
+        }
+
+        .collapsed #panelHeader {
+            border-bottom: none;
+            padding: 15px 24px;
         }
 
         .input-group {
@@ -145,34 +229,39 @@
     <!-- User Interface -->
     <div id="overlay">
         <div class="panel">
-            <h1>AR Dimension Input</h1>
+            <div id="panelHeader">
+                <h1>AR Dimension Input</h1>
+                <button id="collapseBtn" aria-label="Toggle Panel">▲</button>
+            </div>
             
-            <div class="input-group">
-                <label for="width">Width (X)</label>
-                <input type="number" id="width" value="50" min="1" max="1000">
-                <span>cm</span>
-            </div>
-            <div class="input-group">
-                <label for="height">Height (Y)</label>
-                <input type="number" id="height" value="50" min="1" max="1000">
-                <span>cm</span>
-            </div>
-            <div class="input-group">
-                <label for="depth">Depth (Z)</label>
-                <input type="number" id="depth" value="50" min="1" max="1000">
-                <span>cm</span>
-            </div>
+            <div id="panelContent">
+                <div class="input-group">
+                    <label for="width">Width (X)</label>
+                    <input type="number" id="width" value="50" min="1" max="1000">
+                    <span>cm</span>
+                </div>
+                <div class="input-group">
+                    <label for="height">Height (Y)</label>
+                    <input type="number" id="height" value="50" min="1" max="1000">
+                    <span>cm</span>
+                </div>
+                <div class="input-group">
+                    <label for="depth">Depth (Z)</label>
+                    <input type="number" id="depth" value="50" min="1" max="1000">
+                    <span>cm</span>
+                </div>
 
-            <div class="controls">
-                <button id="spawnBtn">Preview 3D</button>
-                <button id="iosArBtn" style="display: none; background: #34c759; color: white;">View in AR</button>
-                <button id="clearBtn">Clear Scene</button>
-            </div>
+                <div class="controls">
+                    <button id="spawnBtn">Preview 3D</button>
+                    <button id="iosArBtn" style="display: none; background: #34c759; color: white;">View in AR</button>
+                    <button id="clearBtn">Clear Scene</button>
+                </div>
 
-            <p class="hint" id="statusHint">
-                View on a mobile device to use AR.<br>
-                Tap "Preview 3D" to view on desktop.
-            </p>
+                <p class="hint" id="statusHint">
+                    View on a mobile device to use AR.<br>
+                    Tap "Preview 3D" to view on desktop.
+                </p>
+            </div>
         </div>
     </div>
 
@@ -264,6 +353,9 @@
             document.getElementById('spawnBtn').addEventListener('click', handleDesktopPreview);
             document.getElementById('clearBtn').addEventListener('click', clearScene);
 
+            // UI Drag and Collapse Logic
+            setupUIDragAndCollapse();
+
             // iOS AR Quick Look setup
             const a = document.createElement('a');
             const supportsIOSAR = a.relList && a.relList.supports && a.relList.supports('ar');
@@ -292,6 +384,74 @@
         }
 
         // --- Core Application Logic ---
+
+        function setupUIDragAndCollapse() {
+            const panel = document.querySelector('.panel');
+            const panelHeader = document.getElementById('panelHeader');
+            const collapseBtn = document.getElementById('collapseBtn');
+
+            // Collapse/Expand
+            collapseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                panel.classList.toggle('collapsed');
+                collapseBtn.innerHTML = panel.classList.contains('collapsed') ? '▼' : '▲';
+            });
+
+            // Draggable Logic
+            let isDragging = false;
+            let currentX = 0, currentY = 0;
+            let initialX = 0, initialY = 0;
+            let xOffset = 0, yOffset = 0;
+
+            function dragStart(e) {
+                if (e.target === collapseBtn) return;
+                
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+                
+                isDragging = true;
+                panelHeader.classList.add('dragging');
+            }
+
+            function dragEnd() {
+                if (!isDragging) return;
+                initialX = currentX;
+                initialY = currentY;
+                isDragging = false;
+                panelHeader.classList.remove('dragging');
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                
+                e.preventDefault(); // Prevent scrolling while dragging
+
+                if (e.type === "touchmove") {
+                    currentX = e.touches[0].clientX - initialX;
+                    currentY = e.touches[0].clientY - initialY;
+                } else {
+                    currentX = e.clientX - initialX;
+                    currentY = e.clientY - initialY;
+                }
+
+                xOffset = currentX;
+                yOffset = currentY;
+                panel.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+            }
+
+            panelHeader.addEventListener("touchstart", dragStart, { passive: false });
+            document.addEventListener("touchend", dragEnd, { passive: false });
+            document.addEventListener("touchmove", drag, { passive: false });
+
+            panelHeader.addEventListener("mousedown", dragStart);
+            document.addEventListener("mouseup", dragEnd);
+            document.addEventListener("mousemove", drag);
+        }
 
         // Generates a USDZ file for iOS AR Quick Look
         async function launchIOSAR() {
