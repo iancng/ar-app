@@ -223,6 +223,104 @@
             color: #000000 !important;
             border: none !important;
         }
+
+        /* Version and Modal Styling */
+        #versionTag {
+            position: absolute;
+            bottom: max(15px, env(safe-area-inset-bottom));
+            left: max(15px, env(safe-area-inset-left));
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            z-index: 100;
+            padding: 5px;
+            transition: color 0.2s;
+            user-select: none;
+            font-weight: 500;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+        }
+
+        #versionTag:hover {
+            color: rgba(255, 255, 255, 1);
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        #changelogModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 20px;
+            box-sizing: border-box;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #changelogModal.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: #1c1c1e;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+
+        #changelogModal.show .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 18px;
+            right: 24px;
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 2rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.2s;
+        }
+        
+        .close-modal:hover { color: white; }
+
+        .changelog-entry { margin-bottom: 24px; }
+        .changelog-entry:last-child { margin-bottom: 0; }
+        .changelog-entry h3 { margin: 0 0 10px 0; font-size: 1.1rem; color: #0a84ff; }
+        .changelog-entry ul { margin: 0; padding-left: 20px; color: #ccc; font-size: 0.95rem; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -264,6 +362,60 @@
             </div>
         </div>
     </div>
+
+    <!-- Version Tag & Changelog Modal -->
+    <div id="versionTag">v1.1</div>
+
+    <div id="changelogModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Changelog</h2>
+                <button class="close-modal" id="closeChangelog">&times;</button>
+            </div>
+            <div class="changelog-entry">
+                <h3>v1.1</h3>
+                <ul>
+                    <li>Added Progressive Web App (PWA) support for native home screen installation.</li>
+                    <li>Added fallback for Apple AR Quick Look on iOS Safari via USDZ generation.</li>
+                    <li>Made the input panel draggable and collapsible to prevent view blocking.</li>
+                </ul>
+            </div>
+            <div class="changelog-entry">
+                <h3>v1.0</h3>
+                <ul>
+                    <li>Initial release of WebXR Dimension Visualizer.</li>
+                    <li>Real-time X, Y, Z dimension inputs.</li>
+                    <li>Desktop 3D grid preview mode.</li>
+                    <li>True AR mode via WebXR API.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Modal Logic
+        const versionTag = document.getElementById('versionTag');
+        const changelogModal = document.getElementById('changelogModal');
+        const closeChangelog = document.getElementById('closeChangelog');
+
+        versionTag.addEventListener('click', () => {
+            changelogModal.style.display = 'flex';
+            // Slight delay to allow display switch before opacity transition
+            setTimeout(() => changelogModal.classList.add('show'), 10);
+        });
+
+        closeChangelog.addEventListener('click', closeModal);
+        
+        // Close modal when clicking outside of the content container
+        changelogModal.addEventListener('click', (e) => {
+            if (e.target === changelogModal) closeModal();
+        });
+
+        function closeModal() {
+            changelogModal.classList.remove('show');
+            setTimeout(() => changelogModal.style.display = 'none', 300); // Matches CSS transition time
+        }
+    </script>
 
     <!-- Import Maps for Three.js ES Modules -->
     <script type="importmap">
